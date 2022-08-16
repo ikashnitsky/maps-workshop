@@ -1,4 +1,5 @@
-# maps-workshop
+# Maps with R ...became yet another type of dataviz
+
 Hands on workshop on producing maps in R 
 
-# [slides](https://ikashnitsky.github.io/share/2106-oxford-maps/slides-maps.html#/)
+# [slides](https://ikashnitsky.github.io/maps-workshop/slides/slides-maps.html)

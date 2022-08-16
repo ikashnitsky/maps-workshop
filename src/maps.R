@@ -1,20 +1,24 @@
 #===============================================================================
-# 2021-06-19 -- SICSS-Oxford
+# 2022-08-18 -- SDU Summer School
 # Maps
 # Ilya Kashnitsky, ilya.kashnitsky@gmail.com
 #===============================================================================
 
 # load required packages
 library(tidyverse)
-library(janitor)
+library(magrittr)
 library(sf)
-library(ggthemes)
+library(cowplot)
 
 # read local shapefile ----------------------------------------------------
 
 # read in the shapefile as sf object
 gd_fr <- read_sf("data/shape-france.shp")
 
+# base R plotting method
+gd_fr %>% plot
+
+# minimal ggplot
 gd_fr %>% 
     ggplot()+
     geom_sf()
@@ -25,7 +29,7 @@ gd_fr %>%
     geom_sf()+
     coord_sf(crs = 2154)
 
-
+# LAEA -- appropriate European proj
 gd_fr %>% 
     ggplot()+
     geom_sf()+
@@ -41,7 +45,7 @@ library(eurostat)
 
 # the built-in dataset of EU boundaries
 gd <- eurostat_geodata_60_2016 %>% 
-    clean_names()
+    janitor::clean_names()
 
 # let's build the most basic map
 gd %>% 
@@ -56,6 +60,7 @@ gdtr %>%
     ggplot() +
     geom_sf()
 
+# Further on, I will run all the examples for Italy only, for the speed of code execution 
 
 # filter out Italy
 gd_it <- gdtr %>% 
@@ -82,7 +87,7 @@ gd_it %>%
 
 
 # these maps are simple ggplots, so we can change them like any other plot
-# ggthemes package contains a nice theme for maps
+# {cowplot} package contains a nice theme for maps
 gd_it %>% 
     ggplot()+
     geom_sf()+
@@ -122,7 +127,6 @@ df_it <- df %>%
         indic_de == "TOTFERRT",
         geo %>% str_sub(1,2) == "IT", # only Italy
         geo %>% paste %>% nchar == 5 # only NUTS-3 
-        # my guess is that most of our problems were because of the Russian Doll (Matreshka) effect of the way spatial data is organized
     ) %>% 
     transmute(
         id = geo %>% paste,
@@ -221,7 +225,7 @@ dj_it %>%
 
 pl <- plotly::last_plot()
 
-htmlwidgets::saveWidget(pl, "ggplotly.html")
+htmlwidgets::saveWidget(pl, "out/ggplotly.html")
 
 
 # bonus -- animate changes from year to year
@@ -244,7 +248,8 @@ dj_it %>%
         showlegend = FALSE # try TRUE to see what happens
     )
 
-
+# unload {plotly}
+pacman::p_unload(plotly)
 
 # create inner boundaries as lines ---------------------------------------
 
@@ -269,7 +274,7 @@ dj_it %>%
 
 
 
-# simplifying polygons ----------------------------------------------------
+# symplifying polygons ----------------------------------------------------
 dj_it %>% 
     filter(year == 2017) %>% 
     ms_simplify() %>% #!!!
@@ -315,44 +320,29 @@ p + geom_sf(data = it_cit)
 # https://cran.r-project.org/web/packages/GADMTools/vignettes/Using_GADMTools.pdf
 library(GADMTools)
 
-gd_ken <- gadm_sf_loadCountries(fileNames = "KEN") # gadm_sf type
+gadm_it <- gadm_sf_loadCountries(fileNames = "ITA", level = 1) 
 
-
-gd_ken <- readRDS(
-    url("https://biogeo.ucdavis.edu/data/gadm3.6/Rsf/gadm36_KEN_0_sf.rds")
-)
-
-# own simple function
-get_gadm_sf <- function (country_iso, level = 0) {
-    require(readr)
-    the_url <- url(
-        paste(
-            "https://biogeo.ucdavis.edu/data/gadm3.6/Rsf/gadm36",
-            country_iso, 
-            level,
-            "sf.rds",
-            sep = "_"
-        )
-    )
-    
-    read_rds(the_url)
-}
-
-
-foo <- get_gadm_sf("FRA", 1)
-
-
-foo %>% 
+gadm_it %>% 
     ggplot()+
     geom_sf()
 
+gadm_sf_it <- gadm_it %>% extract2("sf")
+
+gadm_sf_it %>% 
+    ms_simplify() %>% # the init file took forever for me to render so I simplify
+    ggplot()+
+    geom_sf()
 
 
 # geocoded points ---------------------------------------------------------
 
 # Kazakh GGP data
 
-kz_raw <- rio::import(here::here("data/unmet_loc.csv"))
+kz_raw <- rio::import("data/unmet_loc.csv")
+
+library(xray)
+
+kz_raw %>% xray::distributions()
 
 kz_clean <- kz_raw %>% 
     rename(x = Longitude, y = Latitude) %>% 
@@ -365,22 +355,21 @@ kz_clean <- kz_raw %>%
 
 
 # regions
-gd_kz <- get_gadm_sf("KAZ", 2)
+gd_kz <- gadm_sf_loadCountries(fileNames = "KAZ", level = 2) %>% extract2("sf")
 
 gd_kz %>% 
-    ms_dissolve(field = "GID_1") %>% 
+    ms_dissolve(field = "NAME_1") %>% 
     ms_simplify() %>% 
     ggplot() +
     geom_sf()+
     geom_sf(data = kz_clean, color = "red", alpha = .05)
 
 # limit points to KZ only
-
 kz_only <- kz_clean %>% 
     ms_clip(clip = gd_kz)
 
 gd_kz %>% 
-    ms_dissolve(field = "GID_1") %>% 
+    ms_dissolve(field = "NAME_1") %>% 
     ms_simplify() %>% 
     ggplot() +
     geom_sf()+
@@ -388,7 +377,7 @@ gd_kz %>%
 
 
 gd_kz %>% 
-    ms_dissolve(field = "GID_1") %>% 
+    ms_dissolve(field = "NAME_1") %>% 
     ms_simplify() %>% 
     ggplot() +
     geom_sf()+
@@ -399,14 +388,13 @@ gd_kz %>%
 # interactive map with leaflet
 library(leaflet)
 
-dots <- kz_clean %>% st_as_text()
-
 leaflet(gd_kz) %>% 
     setView(100, 50, 2) %>% 
     addProviderTiles(providers$Stamen.Toner) %>% 
-    # addPolygons() %>% 
-    addCircleMarkers(kz_raw$Longitude, kz_raw$Latitude, 
-                     radius = 1, color = "red",
-                     popup = kz_clean$unmet, 
-                     label = kz_clean$unmet)
+    addCircleMarkers(
+        kz_raw$Longitude, kz_raw$Latitude, 
+        radius = 1, color = "red",
+        popup = kz_clean$unmet, 
+        label = kz_clean$unmet
+    )
 
